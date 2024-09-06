@@ -41,6 +41,7 @@ android {
         resources{
             excludes +="META-INF/LICENSE.md"
             excludes += "META-INF/NOTICE.md"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
 
@@ -53,6 +54,23 @@ android {
 }
 
 dependencies {
+
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.material3)
+    implementation(libs.play.services.nearby)
+    implementation(libs.play.services.location)
+    implementation(libs.androidx.databinding.compiler.common)
+    implementation(libs.identity.jvm)
+    implementation(libs.androidx.bluetooth)
+    implementation(libs.androidx.games.text.input)
+    implementation(libs.androidx.constraintlayout.core)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -71,4 +89,5 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    implementation("com.google.code.gson:gson:2.8.9")
 }
