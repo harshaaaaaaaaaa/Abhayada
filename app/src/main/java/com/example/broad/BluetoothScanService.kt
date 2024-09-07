@@ -12,7 +12,9 @@ import android.os.ParcelUuid
 import androidx.core.app.NotificationCompat
 import com.example.broad.R
 import java.util.UUID
-
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 class BluetoothScanService : Service() {
 
@@ -48,8 +50,25 @@ class BluetoothScanService : Service() {
 
     private fun startBluetoothGattServer() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothGattServer = bluetoothManager.openGattServer(this@BluetoothScanService, gattServerCallback)
-        // Add GATT services and characteristics here
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                bluetoothGattServer = bluetoothManager.openGattServer(this, gattServerCallback)
+                bluetoothGattServer?.addService(createGattService())
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun createGattService(): BluetoothGattService {
+        val service = BluetoothGattService(UUID.fromString("0000180D-0000-1000-8000-00805F9B34FB"), BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val characteristic = BluetoothGattCharacteristic(
+            UUID.fromString("00002A37-0000-1000-8000-00805F9B34FB"),
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(characteristic)
+        return service
     }
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
@@ -89,7 +108,13 @@ class BluetoothScanService : Service() {
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(UUID.fromString("0000FEAA-0000-1000-8000-00805F9B34FB")))
             .build()
-        bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -120,7 +145,19 @@ class BluetoothScanService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        bluetoothLeScanner.stopScan(scanCallback)
-        bluetoothGattServer?.close()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                bluetoothLeScanner.stopScan(scanCallback)
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+            }
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                bluetoothGattServer?.close()
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+            }
+        }
     }
 }

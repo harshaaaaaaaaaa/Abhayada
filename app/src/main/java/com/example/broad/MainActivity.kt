@@ -46,6 +46,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.MainThread
 import android.media.MediaPlayer
 import android.media.PlaybackParams
+import android.telephony.SmsManager
+import android.bluetooth.le.*
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import com.example.broad.ui.theme.BroadTheme
+import kotlinx.coroutines.delay
+import java.util.*
 
 
 class MainActivity : ComponentActivity() {
@@ -125,16 +136,18 @@ class MainActivity : ComponentActivity() {
         }
 
         shakeDetector = ShakeDetector(this) {
-            stopScanning()
-            startBluetoothGattServer()
+            if (!isAdvertising) {
+                startAdvertising()
+            }
         }
         shakeDetector.start()
 
+
         // Start refreshing discoveredDevices every second
-        refreshDiscoveredDevices()
     }
 
-    private fun refreshDiscoveredDevices() {
+    /*private fun refreshDiscoveredDevices() {
+    if (!isAdvertising) {
         handler.postDelayed({
             // Logic to refresh discoveredDevices
             discoveredDevices.clear()
@@ -147,21 +160,19 @@ class MainActivity : ComponentActivity() {
 
             // Schedule the next refresh
             refreshDiscoveredDevices()
-        }, 1000) // 1000 milliseconds = 1 second
+        }, 3000) // 1000 milliseconds = 1 second
     }
+}*/
 
 
-    private fun playAlertSound(rssi: Int) {
+    private fun playAlertSound() {
         if (mediaPlayer == null) {
             mediaPlayer = MediaPlayer.create(this, R.raw.alert_sound) // Place your audio file in res/raw folder
             mediaPlayer?.isLooping = true
         }
         mediaPlayer?.let {
-            val playbackSpeed = calculatePlaybackSpeed(rssi)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                it.playbackParams = PlaybackParams().setSpeed(playbackSpeed)
-            }
             if (!isPlaying) {
+                it.playbackParams = it.playbackParams.setSpeed(1.5f)
                 it.start()
                 isPlaying = true
             }
@@ -171,26 +182,22 @@ class MainActivity : ComponentActivity() {
     private fun pauseAlertSound() {
         mediaPlayer?.let {
             if (it.isPlaying) {
-                it.pause()
-                isPlaying = false
+                it.stop()
+                it.reset()
+                it.release()
+                mediaPlayer = null
             }
         }
     }
 
-    private fun calculatePlaybackSpeed(rssi: Int): Float {
-    val minRssi = -30 // Example maximum RSSI value
-    val maxRssi = -100 // Example minimum RSSI value
-    val normalizedRssi = (rssi - minRssi).toFloat() / (maxRssi - minRssi)
-    return 1f + (normalizedRssi * 3f) // Speed ranges from 1x to 4x
-}
 
     private fun startBluetoothGattServer() {
-        // Implement logic to start Bluetooth GATT server and begin broadcasting
-        startAdvertising()
-        runOnUiThread {
-            Toast.makeText(this, "Bluetooth GATT server started", Toast.LENGTH_SHORT).show()
-        }
+    val intent = Intent(this, BluetoothScanService::class.java)
+    startForegroundService(intent)
+    runOnUiThread {
+        Toast.makeText(this, "Bluetooth GATT server started", Toast.LENGTH_SHORT).show()
     }
+}
 
     /*private fun triggerVibration() {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -234,29 +241,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var isAdvertising = false
     private fun startAdvertising() {
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_ADVERTISE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED) {
             bluetoothLeAdvertiser = bluetoothAdapter?.bluetoothLeAdvertiser
             val settings = AdvertiseSettings.Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH) // Maximize txPower
-                .setConnectable(false)
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                .setConnectable(true)
                 .build()
-
-            startEddystoneAdvertising(settings)
-            startIBeaconAdvertising(settings)
-
-            isBroadcasting = true
-            Toast.makeText(this, "Broadcasting started", Toast.LENGTH_SHORT).show()
+            val data = AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .addServiceUuid(ParcelUuid(UUID.fromString("0000FEAA-0000-1000-8000-00805F9B34FB")))
+                .build()
+            bluetoothLeAdvertiser?.startAdvertising(settings, data, advertiseCallback)
+            stopScanning()
+            startBluetoothGattServer()
+            sendHelpSms("8005320074")
+            isAdvertising = true
         } else {
-            Toast.makeText(this, "Bluetooth Advertise permission not granted", Toast.LENGTH_SHORT)
-                .show()
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE), REQUEST_PERMISSIONS)
         }
     }
+
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
@@ -287,24 +294,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stopAdvertising() {
-        isBroadcasting = false
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_ADVERTISE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (isAdvertising) {
+            bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
             stopEddystoneAdvertising()
             stopIBeaconAdvertising()
+            isAdvertising = false
             Toast.makeText(this, "Broadcasting stopped", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun startScanning() {
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
             bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner
             val scanSettings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -315,25 +315,21 @@ class MainActivity : ComponentActivity() {
             bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
             startForegroundService(Intent(this, BluetoothScanService::class.java))
         } else {
-            Toast.makeText(this, "Bluetooth Scan permission not granted", Toast.LENGTH_SHORT).show()
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_SCAN), REQUEST_PERMISSIONS)
         }
     }
 
 
     private fun stopScanning() {
-    if (ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.BLUETOOTH_SCAN
-        ) == PackageManager.PERMISSION_GRANTED
-    ) {
-        bluetoothLeScanner?.stopScan(scanCallback)
-        if (discoveredDevices.isEmpty()) {
-            pauseAlertSound()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
+            bluetoothLeScanner?.stopScan(scanCallback)
+            if (discoveredDevices.isEmpty()) {
+                pauseAlertSound()
+            }
+        } else {
+            Toast.makeText(this, "Bluetooth Scan permission not granted", Toast.LENGTH_SHORT).show()
         }
-    } else {
-        Toast.makeText(this, "Bluetooth Scan permission not granted", Toast.LENGTH_SHORT).show()
     }
-}
 
 
     private val scanCallback = object : ScanCallback() {
@@ -376,8 +372,8 @@ class MainActivity : ComponentActivity() {
         private fun showSystemAlert(rssi: Int) {
     if (Settings.canDrawOverlays(this@MainActivity)) {
         val alertDialog = AlertDialog.Builder(this@MainActivity)
-            .setTitle("ALERT")
-            .setMessage("Device found nearby")
+            .setTitle("!!!HELP!!!")
+            .setMessage("SOMEONE NEED HELP")
             .setPositiveButton("Reach") { dialog, _ ->
                 dialog.dismiss()
                 showDiscoveredDevicesWindow()
@@ -402,7 +398,7 @@ class MainActivity : ComponentActivity() {
         alertDialog.show()
 
         // Play the alert sound
-        playAlertSound(rssi)
+        playAlertSound()
     } else {
         checkSystemAlertWindowPermission(rssi)
     }
@@ -438,8 +434,6 @@ private val requestOverlayPermissionLauncher = registerForActivityResult(
 }
 
 private var pendingRssi: Int = 0
-
-// Update the call to checkSystemAlertWindowPermission to pass the RSSI value
 private fun someMethodThatCallsCheckPermission(rssi: Int) {
     pendingRssi = rssi
     checkSystemAlertWindowPermission(rssi)
@@ -570,6 +564,19 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
             }
         }
     }
+
+    private fun sendHelpSms(phoneNumber: String) {
+    val message = "I need help at this Location"
+    val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("smsto:$phoneNumber")
+        putExtra("sms_body", message)
+    }
+    if (smsIntent.resolveActivity(packageManager) != null) {
+        startActivity(smsIntent)
+    } else {
+        Toast.makeText(this, "No SMS app found", Toast.LENGTH_SHORT).show()
+    }
+}
 
     @Composable
     fun DiscoveredDevicesWindow(devices: List<Device>) {
