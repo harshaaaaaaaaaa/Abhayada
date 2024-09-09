@@ -4,11 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.broad"
+
+    lint{
+        baseline = project.file("lint-baseline.xml")
+    }
+    namespace = "com.help.Abhayada"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.broad"
+        applicationId = "com.help.Abhayada"
         minSdk = 33
         targetSdk = 34
         versionCode = 1

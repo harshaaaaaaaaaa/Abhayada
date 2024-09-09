@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.broad">
+    package="com.help.Abhayada">
 
     <uses-feature
         android:name="android.hardware.telephony"
@@ -34,13 +34,16 @@
     android:name=".BluetoothScanService"
     android:foregroundServiceType="location" />
 
-        <receiver
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="false"/>
+        <receiver android:name=".AppInstallReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.help.Abhayada.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

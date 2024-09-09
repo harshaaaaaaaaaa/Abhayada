@@ -1,4 +1,4 @@
-package com.example.broad
+package com.help.Abhayada
 
 import BluetoothScanService
 import android.Manifest
@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.broad.ui.theme.BroadTheme
+import com.help.Abhayada.ui.theme.BroadTheme
 import kotlinx.coroutines.delay
 import java.util.*
 import android.content.BroadcastReceiver
@@ -35,28 +35,14 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
 import android.view.Gravity
 import android.view.WindowManager
-import androidx.compose.ui.text.font.FontVariation
 import androidx.core.app.NotificationCompat
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.MainThread
 import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.telephony.SmsManager
-import android.bluetooth.le.*
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import com.example.broad.ui.theme.BroadTheme
-import kotlinx.coroutines.delay
-import java.util.*
 
 
 class MainActivity : ComponentActivity() {
@@ -65,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         BluetoothAdapter.getDefaultAdapter()
     }
+    private var isGattServerRunning = false
     private var mediaPlayer: MediaPlayer? = null
     private var isPlaying = false
     private var alertShown = false
@@ -128,7 +115,9 @@ class MainActivity : ComponentActivity() {
         if (!bluetoothAdapter!!.isEnabled) {
             showEnableBluetoothDialog()
         } else {
+            requestAllPermissionsOnInstall()
             checkPermissions()
+            checkAndRequestSmsPermission()
         }
 
         intent?.getStringExtra("device_address")?.let { deviceAddress ->
@@ -142,27 +131,35 @@ class MainActivity : ComponentActivity() {
         }
         shakeDetector.start()
 
+        startScanning()
 
-        // Start refreshing discoveredDevices every second
     }
 
-    /*private fun refreshDiscoveredDevices() {
-    if (!isAdvertising) {
-        handler.postDelayed({
-            // Logic to refresh discoveredDevices
-            discoveredDevices.clear()
-            startScanning()
+    private fun refreshDiscoveredDevices() {
+        if (!isGattServerRunning) {
+            handler.postDelayed({
+                // Logic to refresh discoveredDevices
+                discoveredDevices.clear()
+                startScanning()
 
-            // Check if discoveredDevices is empty and pause alert sound if true
-            if (discoveredDevices.isEmpty()) {
-                pauseAlertSound()
-            }
+                // Check if any devices are found
+                if (discoveredDevices.isEmpty()) {
+                    // Stop the alert sound and stop refreshing
+                    stopAlertSound()
+                    return@postDelayed
+                }
 
-            // Schedule the next refresh
-            refreshDiscoveredDevices()
-        }, 3000) // 1000 milliseconds = 1 second
+                // Schedule the next refresh
+                refreshDiscoveredDevices()
+            }, 3000) // 3000 milliseconds = 3 seconds
+
+            // Play the alert sound when refreshDiscoveredDevices runs
+            playAlertSound()
+        } else {
+            // Stop the alert sound when refreshDiscoveredDevices stops
+            stopAlertSound()
+        }
     }
-}*/
 
 
     private fun playAlertSound() {
@@ -171,33 +168,32 @@ class MainActivity : ComponentActivity() {
             mediaPlayer?.isLooping = true
         }
         mediaPlayer?.let {
-            if (!isPlaying) {
-                it.playbackParams = it.playbackParams.setSpeed(1.5f)
+            if (!isPlaying)
                 it.start()
                 isPlaying = true
             }
         }
-    }
 
-    private fun pauseAlertSound() {
+    private fun stopAlertSound() {
         mediaPlayer?.let {
             if (it.isPlaying) {
                 it.stop()
                 it.reset()
-                it.release()
                 mediaPlayer = null
+                isPlaying = false
             }
         }
     }
 
 
     private fun startBluetoothGattServer() {
-    val intent = Intent(this, BluetoothScanService::class.java)
-    startForegroundService(intent)
-    runOnUiThread {
-        Toast.makeText(this, "Bluetooth GATT server started", Toast.LENGTH_SHORT).show()
+        val intent = Intent(this, BluetoothScanService::class.java)
+        startForegroundService(intent)
+        isGattServerRunning = true
+        runOnUiThread {
+            Toast.makeText(this, "Bluetooth GATT server started", Toast.LENGTH_SHORT).show()
+        }
     }
-}
 
     /*private fun triggerVibration() {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -227,7 +223,13 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.BLUETOOTH,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            Manifest.permission.SYSTEM_ALERT_WINDOW,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.POST_NOTIFICATIONS,
         )
         val permissionsToRequest = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -257,7 +259,9 @@ class MainActivity : ComponentActivity() {
             bluetoothLeAdvertiser?.startAdvertising(settings, data, advertiseCallback)
             stopScanning()
             startBluetoothGattServer()
-            sendHelpSms("8005320074")
+            startEddystoneAdvertising(settings)
+            startIBeaconAdvertising(settings)
+            sendHelpSms("+918005320074")
             isAdvertising = true
         } else {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE), REQUEST_PERMISSIONS)
@@ -321,15 +325,13 @@ class MainActivity : ComponentActivity() {
 
 
     private fun stopScanning() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
-            bluetoothLeScanner?.stopScan(scanCallback)
-            if (discoveredDevices.isEmpty()) {
-                pauseAlertSound()
-            }
-        } else {
-            Toast.makeText(this, "Bluetooth Scan permission not granted", Toast.LENGTH_SHORT).show()
-        }
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
+        bluetoothLeScanner?.stopScan(scanCallback)
+        alertShown = false // Reset the alertShown flag
+    } else {
+        Toast.makeText(this, "Bluetooth Scan permission not granted", Toast.LENGTH_SHORT).show()
     }
+}
 
 
     private val scanCallback = object : ScanCallback() {
@@ -358,6 +360,11 @@ class MainActivity : ComponentActivity() {
                 showSystemAlert(rssi)
                 showNotification()
                 alertShown = true
+            }
+
+            // Start refreshing discoveredDevices once a device is found
+            if (!isGattServerRunning) {
+                refreshDiscoveredDevices()
             }
         }
 
@@ -398,7 +405,7 @@ class MainActivity : ComponentActivity() {
         alertDialog.show()
 
         // Play the alert sound
-        playAlertSound()
+        //playAlertSound()
     } else {
         checkSystemAlertWindowPermission(rssi)
     }
@@ -465,7 +472,7 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
             notificationManager.notify(1, notification)
         }
 
-        override fun onScanFailed(errorCode: Int) {
+        /*override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
             val errorMessage = when (errorCode) {
                 ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "Scan already started"
@@ -479,7 +486,7 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
                 "Scan failed with error: $errorMessage",
                 Toast.LENGTH_SHORT
             ).show()
-        }
+        }*/
     }
 
     private fun moveOfflineDevicesToHistory() {
@@ -565,18 +572,66 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
         }
     }
 
-    private fun sendHelpSms(phoneNumber: String) {
-    val message = "I need help at this Location"
-    val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("smsto:$phoneNumber")
-        putExtra("sms_body", message)
+    private fun requestAllPermissionsOnInstall() {
+    val permissions = arrayOf(
+        Manifest.permission.BLUETOOTH,
+        Manifest.permission.BLUETOOTH_ADMIN,
+        Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.BLUETOOTH_ADVERTISE,
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.SEND_SMS,
+        Manifest.permission.BLUETOOTH,
+        Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+        Manifest.permission.SYSTEM_ALERT_WINDOW,
+        Manifest.permission.SEND_SMS,
+        Manifest.permission.POST_NOTIFICATIONS,
+    )
+    val permissionsToRequest = permissions.filter {
+        ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
     }
-    if (smsIntent.resolveActivity(packageManager) != null) {
-        startActivity(smsIntent)
-    } else {
-        Toast.makeText(this, "No SMS app found", Toast.LENGTH_SHORT).show()
+    if (permissionsToRequest.isNotEmpty()) {
+        ActivityCompat.requestPermissions(
+            this,
+            permissionsToRequest.toTypedArray(),
+            REQUEST_PERMISSIONS
+        )
     }
 }
+
+    private fun sendHelpSms(phoneNumber: String) {
+        val message = "I need help at this Location"
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
+            val smsManager = SmsManager.getDefault()
+            smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+            Toast.makeText(this, "Help SMS sent", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "SMS permission not granted", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkAndRequestSmsPermission() {
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), REQUEST_SEND_SMS)
+    }
+}
+
+companion object {
+    private const val REQUEST_SEND_SMS = 3
+}
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_SEND_SMS) {
+            if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+                // Permission granted, you can send SMS
+            } else {
+                Toast.makeText(this, "SMS permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     @Composable
     fun DiscoveredDevicesWindow(devices: List<Device>) {
@@ -599,25 +654,21 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
         }
     }
 
-    private fun calculateDistance(rssi: Int): Double {
+    /*private fun calculateDistance(rssi: Int): Double {
         val txPower = -59 // This is a default value for the TX power of the beacon
         return Math.pow(10.0, (txPower - rssi) / 20.0)
-    }
+    }*/
 
     @Composable
     fun DeviceList(devices: List<Device>) {
         Column {
             devices.forEach { device ->
-                val distance = remember { mutableDoubleStateOf(calculateDistance(device.rssi)) }
-                LaunchedEffect(device.rssi) {
+                //val distance = remember { mutableDoubleStateOf(calculateDistance(device.rssi)) }
+                /*LaunchedEffect(device.rssi) {
                     distance.value = calculateDistance(device.rssi)
-                }
+                }*/
                 Text(
-                    text = "ID: ${device.id}, MAC: ${device.macAddress}, RSSI: ${device.rssi}, Distance: ${
-                        "%.2f".format(
-                            distance.value
-                        )
-                    } meters"
+                    text = "ID: ${device.id}, MAC: ${device.macAddress}, RSSI: ${device.rssi}, Distance: x meters"
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -681,15 +732,6 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
                     }
                 }
             }
-        }
-    }
-}
-
-class BootReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            val serviceIntent = Intent(context, BluetoothScanService::class.java)
-            context.startForegroundService(serviceIntent)
         }
     }
 }
