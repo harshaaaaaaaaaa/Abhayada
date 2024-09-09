@@ -14,6 +14,7 @@ android {
     defaultConfig {
         applicationId = "com.help.Abhayada"
         minSdk = 33
+        //noinspection OldTargetApi
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
