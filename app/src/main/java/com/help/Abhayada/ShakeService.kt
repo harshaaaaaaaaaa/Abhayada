@@ -17,11 +17,6 @@ import androidx.core.app.NotificationCompat
 class ShakeService : Service() {
 
     private lateinit var shakeDetector: ShakeDetector
-    private val bluetoothAdapter: BluetoothAdapter by lazy {
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothManager.adapter
-    }
-
     override fun onCreate() {
         super.onCreate()
         shakeDetector = ShakeDetector(this@ShakeService) {
@@ -31,17 +26,14 @@ class ShakeService : Service() {
         shakeDetector.start()
 
         val filter = IntentFilter("com.example.broad.SHAKE_DETECTED")
-        registerReceiver(shakeReceiver, filter)
+        registerReceiver(shakeReceiver, filter, RECEIVER_NOT_EXPORTED)
 
         startForegroundService()
     }
 
     private fun startForegroundService() {
-        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channelId =
             createNotificationChannel()
-        } else {
-            ""
-        }
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Shake Service")
