@@ -24,7 +24,6 @@ class BluetoothScanService : Service() {
         super.onCreate()
         bluetoothLeScanner = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter.bluetoothLeScanner
         startForegroundService()
-        startBluetoothGattServer()
         startScanning()
     }
 
@@ -47,58 +46,6 @@ class BluetoothScanService : Service() {
         startForeground(1, notification)
     }
 
-    private fun startBluetoothGattServer() {
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                bluetoothGattServer = bluetoothManager.openGattServer(this, gattServerCallback)
-                bluetoothGattServer?.addService(createGattService())
-            } catch (e: SecurityException) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    private fun createGattService(): BluetoothGattService {
-        val service = BluetoothGattService(UUID.fromString("0000180D-0000-1000-8000-00805F9B34FB"), BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val characteristic = BluetoothGattCharacteristic(
-            UUID.fromString("00002A37-0000-1000-8000-00805F9B34FB"),
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_READ
-        )
-        service.addCharacteristic(characteristic)
-        return service
-    }
-
-    private val gattServerCallback = object : BluetoothGattServerCallback() {
-        override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
-            super.onConnectionStateChange(device, status, newState)
-            // Handle connection state changes
-        }
-
-        override fun onCharacteristicReadRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            offset: Int,
-            characteristic: BluetoothGattCharacteristic
-        ) {
-            super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
-            // Handle read requests
-        }
-
-        override fun onCharacteristicWriteRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            characteristic: BluetoothGattCharacteristic,
-            preparedWrite: Boolean,
-            responseNeeded: Boolean,
-            offset: Int,
-            value: ByteArray
-        ) {
-            super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
-            // Handle write requests
-        }
-    }
 
     private fun startScanning() {
         val scanSettings = ScanSettings.Builder()

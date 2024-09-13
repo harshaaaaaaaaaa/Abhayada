@@ -43,6 +43,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.telephony.SmsManager
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +53,8 @@ class MainActivity : ComponentActivity() {
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         BluetoothAdapter.getDefaultAdapter()
     }
+    private var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
+    private var bluetoothLeScanner: BluetoothLeScanner? = null
     private var isGattServerRunning = false
     private var mediaPlayer: MediaPlayer? = null
     private var isPlaying = false
@@ -61,8 +65,6 @@ class MainActivity : ComponentActivity() {
     private val discoveredBeacons = mutableStateListOf<Device>()
     private val REQUEST_ENABLE_BT = 1
     private val REQUEST_PERMISSIONS = 2
-    private var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
-    private var bluetoothLeScanner: BluetoothLeScanner? = null
     private lateinit var handler: Handler
     private var isBroadcasting = false
     private var advertisingFrequency = 15000L // Default 15 seconds
@@ -75,7 +77,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             BroadTheme {
                 MainActivityContent()
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(modifier = Modifier.fillMaxSize().background(color = Color.Black)) { innerPadding ->
                     Box(
                         modifier = Modifier.padding(innerPadding)
                     ) {
@@ -100,6 +102,10 @@ class MainActivity : ComponentActivity() {
                             }
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = { showDiscoveredDevicesWindow() }) {
+                                Text(text = "Show Discovered Devices")
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = { setContent { BroadTheme { ShowHistoryDevicesWindow() } } }) {
                                 Text(text = "Show Discovered Devices")
                             }
                         }
@@ -135,32 +141,6 @@ class MainActivity : ComponentActivity() {
 
     }
 
-    private fun refreshDiscoveredDevices() {
-        if (!isGattServerRunning) {
-            handler.postDelayed({
-                // Logic to refresh discoveredDevices
-                discoveredDevices.clear()
-                startScanning()
-
-                // Check if any devices are found
-                if (discoveredDevices.isEmpty()) {
-                    // Stop the alert sound and stop refreshing
-                    stopAlertSound()
-                    return@postDelayed
-                }
-
-                // Schedule the next refresh
-                refreshDiscoveredDevices()
-            }, 3000) // 3000 milliseconds = 3 seconds
-
-            // Play the alert sound when refreshDiscoveredDevices runs
-            playAlertSound()
-        } else {
-            // Stop the alert sound when refreshDiscoveredDevices stops
-            stopAlertSound()
-        }
-    }
-
 
     private fun playAlertSound() {
         if (mediaPlayer == null) {
@@ -185,22 +165,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
-    private fun startBluetoothGattServer() {
-        val intent = Intent(this, BluetoothScanService::class.java)
-        startForegroundService(intent)
-        isGattServerRunning = true
-        runOnUiThread {
-            Toast.makeText(this, "Bluetooth GATT server started", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     /*private fun triggerVibration() {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE / 2)) // Moderate intensity
     }*/
 
     private fun showEnableBluetoothDialog() {
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
         AlertDialog.Builder(this)
             .setTitle("Enable Bluetooth")
             .setMessage("This app requires Bluetooth to function. Please enable Bluetooth.")
@@ -213,7 +184,10 @@ class MainActivity : ComponentActivity() {
             }
             .setCancelable(false)
             .show()
+    } else {
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_PERMISSIONS)
     }
+}
 
     private fun checkPermissions() {
         val permissions = arrayOf(
@@ -258,7 +232,6 @@ class MainActivity : ComponentActivity() {
                 .build()
             bluetoothLeAdvertiser?.startAdvertising(settings, data, advertiseCallback)
             stopScanning()
-            startBluetoothGattServer()
             startEddystoneAdvertising(settings)
             startIBeaconAdvertising(settings)
             sendHelpSms("+918005320074")
@@ -298,14 +271,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stopAdvertising() {
-        if (isAdvertising) {
+    if (isAdvertising) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED) {
             bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
             stopEddystoneAdvertising()
             stopIBeaconAdvertising()
             isAdvertising = false
             Toast.makeText(this, "Broadcasting stopped", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Bluetooth Advertise permission not granted", Toast.LENGTH_SHORT).show()
         }
     }
+}
 
     private fun startScanning() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
@@ -318,6 +295,7 @@ class MainActivity : ComponentActivity() {
                 .build()
             bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
             startForegroundService(Intent(this, BluetoothScanService::class.java))
+            stopAlertSound()
         } else {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_SCAN), REQUEST_PERMISSIONS)
         }
@@ -362,10 +340,6 @@ class MainActivity : ComponentActivity() {
                 alertShown = true
             }
 
-            // Start refreshing discoveredDevices once a device is found
-            if (!isGattServerRunning) {
-                refreshDiscoveredDevices()
-            }
         }
 
         override fun onBatchScanResults(results: List<ScanResult>) {
@@ -405,46 +379,10 @@ class MainActivity : ComponentActivity() {
         alertDialog.show()
 
         // Play the alert sound
-        //playAlertSound()
-    } else {
-        checkSystemAlertWindowPermission(rssi)
+        playAlertSound()
     }
 }
 
-private fun checkSystemAlertWindowPermission(rssi: Int) {
-    if (!Settings.canDrawOverlays(this@MainActivity)) {
-        val intent = Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:$packageName")
-        )
-        requestOverlayPermissionLauncher.launch(intent)
-        startActivityForResult(intent, REQUEST_CODE_SYSTEM_ALERT_WINDOW)
-    }
-}
-
-
-
-private val requestOverlayPermissionLauncher = registerForActivityResult(
-    ActivityResultContracts.StartActivityForResult()
-) { result ->
-    if (result.resultCode == RESULT_OK) {
-        if (Settings.canDrawOverlays(this@MainActivity)) {
-            showSystemAlert(pendingRssi)
-        } else {
-            Toast.makeText(
-                this@MainActivity,
-                "System Alert Window permission not granted",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-}
-
-private var pendingRssi: Int = 0
-private fun someMethodThatCallsCheckPermission(rssi: Int) {
-    pendingRssi = rssi
-    checkSystemAlertWindowPermission(rssi)
-}
 
         private val REQUEST_CODE_SYSTEM_ALERT_WINDOW = 1001
 
@@ -472,7 +410,7 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
             notificationManager.notify(1, notification)
         }
 
-        /*override fun onScanFailed(errorCode: Int) {
+        override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
             val errorMessage = when (errorCode) {
                 ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "Scan already started"
@@ -486,7 +424,7 @@ private fun someMethodThatCallsCheckPermission(rssi: Int) {
                 "Scan failed with error: $errorMessage",
                 Toast.LENGTH_SHORT
             ).show()
-        }*/
+        }
     }
 
     private fun moveOfflineDevicesToHistory() {

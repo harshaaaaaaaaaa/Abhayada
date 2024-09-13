@@ -10,6 +10,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import android.app.AlertDialog
+import android.bluetooth.le.AdvertiseSettings
+import android.os.Handler
+import android.os.Looper
 
 class ShakeService : Service() {
 
@@ -53,16 +57,35 @@ class ShakeService : Service() {
     private val shakeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.example.broad.SHAKE_DETECTED") {
-                startBluetoothGattServer()
+                val builder = AlertDialog.Builder(this@ShakeService)
+                builder.setTitle("Start Broadcasting")
+                builder.setMessage("Do you want to start broadcasting?")
+                builder.setPositiveButton("Yes") { _, _ ->
+                    startAdvertising()
+                }
+                builder.setNegativeButton("No") { _, _ -> }
+                val dialog = builder.create()
+                dialog.show()
+
+                // Automatically dismiss the dialog after 10 seconds
+                Handler(Looper.getMainLooper()).postDelayed({
+                    if (dialog.isShowing) {
+                        dialog.dismiss()
+                    }
+                }, 10000)
             }
         }
     }
 
-    private fun startBluetoothGattServer() {
-        // Implement logic to start Bluetooth GATT server and begin broadcasting
-        // Example:
-        // val gattServer = bluetoothAdapter.bluetoothLeAdvertiser
-        // gattServer.startAdvertising(...)
+    private fun startAdvertising() {
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setConnectable(true)
+            .build()
+
+        BluetoothAdvertiser.startEddystoneAdvertising(this, settings)
+        BluetoothAdvertiser.startIBeaconAdvertising(this, settings)
     }
 
     override fun onDestroy() {

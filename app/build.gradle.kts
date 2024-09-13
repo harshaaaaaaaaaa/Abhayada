@@ -5,8 +5,11 @@ plugins {
 
 android {
 
-    lint{
-        baseline = project.file("lint-baseline.xml")
+    configurations.all {
+        resolutionStrategy {
+            force("androidx.test.ext:junit:1.1.5")
+            force("androidx.test.espresso:espresso-core:3.5.0")
+        }
     }
     namespace = "com.help.Abhayada"
     compileSdk = 34
@@ -72,6 +75,7 @@ dependencies {
     implementation(libs.androidx.bluetooth)
     implementation(libs.androidx.games.text.input)
     implementation(libs.androidx.constraintlayout.core)
+    implementation(libs.androidx.ui.test.junit4.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -94,4 +98,8 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    // Test dependencies
+    androidTestImplementation(libs.androidx.junit.v115)
+    androidTestImplementation(libs.androidx.espresso.core.v350)
+    androidTestImplementation(libs.ui.test.junit4)
 }
