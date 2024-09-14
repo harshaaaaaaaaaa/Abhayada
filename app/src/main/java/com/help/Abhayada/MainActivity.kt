@@ -32,6 +32,8 @@ import kotlinx.coroutines.delay
 import java.util.*
 import android.content.Context
 import android.content.IntentFilter
+import android.gesture.GestureOverlayView
+import android.gesture.Prediction
 import android.graphics.PixelFormat
 import android.location.Location
 import android.location.LocationListener
@@ -512,16 +514,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun moveOfflineDevicesToHistory() {
-        val currentTime = System.currentTimeMillis()
-        val iterator = discoveredDevices.iterator()
-        while (iterator.hasNext()) {
-            val device = iterator.next()
-            if (currentTime - device.lastSeen > 3000) { // 3 seconds timeout
-                historyDevices.add(device)
-                iterator.remove()
-            }
+    val currentTime = System.currentTimeMillis()
+    val iterator = discoveredDevices.iterator()
+    while (iterator.hasNext()) {
+        val device = iterator.next()
+        if (currentTime - device.lastSeen > 1000) { // 3 seconds timeout
+            historyDevices.add(device)
+            iterator.remove()
         }
     }
+    if (discoveredDevices.isEmpty()) {
+        stopAlertSound() // Stop the alert sound if no devices are found
+    }
+}
 
     private fun startEddystoneAdvertising(settings: AdvertiseSettings) {
         if (ContextCompat.checkSelfPermission(
