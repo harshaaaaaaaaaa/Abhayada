@@ -1,6 +1,5 @@
 package com.help.Abhayada
 
-import BluetoothScanService
 import android.Manifest
 import android.app.AlertDialog
 import android.app.NotificationChannel
@@ -32,8 +31,6 @@ import kotlinx.coroutines.delay
 import java.util.*
 import android.content.Context
 import android.content.IntentFilter
-import android.gesture.GestureOverlayView
-import android.gesture.Prediction
 import android.graphics.PixelFormat
 import android.location.Location
 import android.location.LocationListener
@@ -46,6 +43,8 @@ import android.provider.Settings
 import android.media.MediaPlayer
 import android.telephony.SmsManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 
 
@@ -68,10 +67,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var handler: Handler
     private val macAddresses = mutableListOf<String>()
     private lateinit var locationManager: LocationManager
-    private val markedArea = MarkedArea(latitude = 26.4986183, longitude = 80.2857243, radius = 100f) // Example coordinates
+    private val markedArea = MarkedArea(latitude = 26.4945234, longitude =  80.3066683, radius = 100f) // Example coordinates
     private var currentLatitude by mutableStateOf<Double?>(null)
     private var currentLongitude by mutableStateOf<Double?>(null)
     private lateinit var screenLockReceiver: ScreenLockReceiver
+    private val PREFS_NAME = "AreaAlertPrefs"
+    private val PREFS_KEY_ALERT_SHOWN = "isAlertShown"
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,12 +147,13 @@ class MainActivity : ComponentActivity() {
             showDiscoveredDevicesWindow()
         }
 
-        shakeDetector.start()
+
         shakeDetector = ShakeDetector(this) {
             if (!isAdvertising) {
                 startAdvertising()
             }
         }
+        shakeDetector.start()
 
         screenLockReceiver = ScreenLockReceiver {
             startAdvertising()
@@ -169,13 +171,21 @@ class MainActivity : ComponentActivity() {
             val userLongitude = location.longitude
 
             if (isUserInMarkedArea(userLatitude, userLongitude, markedArea)) {
-                showAlertAndNotification(this@MainActivity)
+                val intent = Intent(this@MainActivity, AreaAlertReceiver::class.java)
+                sendBroadcast(intent)
+            } else {
+                resetAlertShown()
             }
         }
 
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         override fun onProviderEnabled(provider: String) {}
         override fun onProviderDisabled(provider: String) {}
+    }
+
+    private fun resetAlertShown() {
+        val sharedPreferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        sharedPreferences.edit().putBoolean(PREFS_KEY_ALERT_SHOWN, false).apply()
     }
 
 
@@ -282,7 +292,12 @@ class MainActivity : ComponentActivity() {
             stopScanning()
             startEddystoneAdvertising(settings)
             startIBeaconAdvertising(settings)
-            sendHelpSms("+918005320074")
+
+            // Get current location and send SMS
+            getCurrentLocation { latitude, longitude ->
+                sendHelpSms("+918005320074", latitude, longitude)
+            }
+
             isAdvertising = true
         } else {
             ActivityCompat.requestPermissions(
@@ -449,42 +464,42 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
-
-
-
         private fun showSystemAlert(rssi: Int) {
-    if (Settings.canDrawOverlays(this@MainActivity)) {
-        val alertDialog = AlertDialog.Builder(this@MainActivity)
-            .setTitle("!!!HELP!!!")
-            .setMessage("SOMEONE NEED HELP")
-            .setPositiveButton("Reach") { dialog, _ ->
-                dialog.dismiss()
-                showDiscoveredDevicesWindow()
+            val sharedPreferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val alertShown = sharedPreferences.getBoolean(PREFS_KEY_ALERT_SHOWN, false)
+
+            if (!alertShown && Settings.canDrawOverlays(this@MainActivity)) {
+                val alertDialog = AlertDialog.Builder(this@MainActivity)
+                    .setTitle("!!!HELP!!!")
+                    .setMessage("SOMEONE NEED HELP")
+                    .setPositiveButton("Reach") { dialog, _ ->
+                        dialog.dismiss()
+                        showDiscoveredDevicesWindow()
+                        sharedPreferences.edit().putBoolean(PREFS_KEY_ALERT_SHOWN, true).apply()
+                    }
+                    .setCancelable(false)
+                    .create()
+
+                val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                val layoutParams = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    else
+                        WindowManager.LayoutParams.TYPE_PHONE,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT
+                )
+
+                layoutParams.gravity = Gravity.CENTER
+                alertDialog.window?.setType(layoutParams.type)
+                alertDialog.show()
+
+                // Play the alert sound
+                playAlertSound()
             }
-            .setCancelable(false)
-            .create()
-
-        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        )
-
-        layoutParams.gravity = Gravity.CENTER
-        alertDialog.window?.setType(layoutParams.type)
-        alertDialog.show()
-
-        // Play the alert sound
-        playAlertSound()
-    }
-}
-
+        }
 
         private val REQUEST_CODE_SYSTEM_ALERT_WINDOW = 1001
 
@@ -657,16 +672,17 @@ class MainActivity : ComponentActivity() {
 
 
 
-    private fun sendHelpSms(phoneNumber: String) {
-        val message = "I need help at this Location, currentLatitude: $currentLatitude, currentLongitude: $currentLongitude"
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
-            val smsManager = SmsManager.getDefault()
-            smsManager.sendTextMessage(phoneNumber, null, message, null, null)
-            Toast.makeText(this, "Help SMS sent", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "SMS permission not granted", Toast.LENGTH_SHORT).show()
-        }
+    private fun sendHelpSms(phoneNumber: String, latitude: Double, longitude: Double) {
+    val googleMapsLink = "https://www.google.com/maps/search/?api=1&query=$latitude,$longitude"
+    val message = "I need help at this location: $googleMapsLink"
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
+        val smsManager = SmsManager.getDefault()
+        smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+        Toast.makeText(this, "Help SMS sent", Toast.LENGTH_SHORT).show()
+    } else {
+        Toast.makeText(this, "SMS permission not granted", Toast.LENGTH_SHORT).show()
     }
+}
 
     private fun checkAndRequestSmsPermission() {
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -742,14 +758,19 @@ fun MainActivityContent() {
     @Composable
     fun DiscoveredDevicesWindow(devices: List<Device>) {
         val deviceStates = remember { devices.map { it.id to mutableStateOf(it) }.toMap() }
+        val allDevices = remember { mutableStateListOf<Device>() }
 
         LaunchedEffect(devices) {
             while (true) {
                 devices.forEach { device ->
-                    val deviceState = deviceStates[device.id]
-                    deviceState?.value = device
+                    val existingDevice = allDevices.find { it.id == device.id }
+                    if (existingDevice != null) {
+                        existingDevice.updateRssi(device.rssi)
+                    } else {
+                        allDevices.add(0, device) // Add new devices on top
+                    }
                 }
-                delay(1000) // Update every 2 seconds
+                delay(1000) // Update every second
             }
         }
 
@@ -762,7 +783,7 @@ fun MainActivityContent() {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     Text(text = "Discovered Devices", modifier = Modifier.padding(16.dp))
-                    DeviceList(devices = devices)
+                    DeviceList(devices = allDevices)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { setContent { BroadTheme { MainActivityContent() } } }) {
                         Text(text = "Back")
@@ -804,35 +825,34 @@ fun ShowHistoryDevicesWindow(currentLatitude: Double?, currentLongitude: Double?
     }
 }
 
+
     @Composable
     fun DeviceList(devices: List<Device>) {
-        val deviceStates = remember { devices.map { it.id to mutableStateOf(it) }.toMap() }
         val currentTime = System.currentTimeMillis()
 
-        devices.forEach { device ->
-            val deviceState = deviceStates[device.id]
-            deviceState?.value = device
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            devices.forEach { device ->
+                val distance = device.calculateDistance()
+                val isActive = currentTime - device.lastSeen <= 2000 // 2 seconds timeout
+                val textColor = if (isActive) Color.Black else Color.Gray
+                val backgroundColor = if (isActive) Color.Yellow else Color.Transparent
 
-            val distance = device.calculateDistance()
-            val isActive = currentTime - device.lastSeen <= 2000 // 3 seconds timeout
-            val textColor = if (isActive) Color.Black else Color.Gray
-            val backgroundColor = if (isActive) Color.Yellow else Color.Transparent
-
-            Box(
-                modifier = Modifier
-                    .background(color = backgroundColor)
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = "ID: ${device.id}, MAC: ${device.macAddress}, Distance: ${
-                        "%.2f".format(
-                            distance
-                        )
-                    } meters",
-                    color = textColor
-                )
+                Box(
+                    modifier = Modifier
+                        .background(color = backgroundColor)
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "ID: ${device.id}, MAC: ${device.macAddress}, Distance: ${
+                            "%.2f".format(
+                                distance
+                            )
+                        } meters",
+                        color = textColor
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }

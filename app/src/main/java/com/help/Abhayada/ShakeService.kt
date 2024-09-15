@@ -14,6 +14,7 @@ import android.app.AlertDialog
 import android.bluetooth.le.AdvertiseSettings
 import android.os.Handler
 import android.os.Looper
+import android.os.Vibrator
 
 class ShakeService : Service() {
 
@@ -22,7 +23,7 @@ class ShakeService : Service() {
         super.onCreate()
         shakeDetector = ShakeDetector(this@ShakeService) {
             val intent = Intent("com.example.broad.SHAKE_DETECTED")
-            sendBroadcast(intent)
+            startBroadcastingWithHapticFeedback()
         }
         shakeDetector.start()
 
@@ -30,6 +31,17 @@ class ShakeService : Service() {
         registerReceiver(shakeReceiver, filter, RECEIVER_NOT_EXPORTED)
 
         startForegroundService()
+    }
+
+    private fun startBroadcastingWithHapticFeedback() {
+        startAdvertising()
+        triggerHapticFeedback()
+    }
+    private fun triggerHapticFeedback() {
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (vibrator.hasVibrator()) {
+            vibrator.vibrate(500) // Vibrate for 500 milliseconds
+        }
     }
 
     private fun startForegroundService() {
