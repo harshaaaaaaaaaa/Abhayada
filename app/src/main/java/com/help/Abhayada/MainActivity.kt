@@ -42,10 +42,53 @@ import androidx.core.app.NotificationCompat
 import android.provider.Settings
 import android.media.MediaPlayer
 import android.telephony.SmsManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import com.help.Abhayada.hooks.useState
+import com.help.Abhayada.ui.component.EmergencyContactsSection
+import com.help.Abhayada.ui.component.PopUp
+import kotlinx.coroutines.launch
 
 
 class MainActivity : ComponentActivity() {
@@ -67,7 +110,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var handler: Handler
     private val macAddresses = mutableListOf<String>()
     private lateinit var locationManager: LocationManager
-    private val markedArea = MarkedArea(latitude = 26.4945234, longitude =  80.3066683, radius = 100f) // Example coordinates
+    private val markedArea = MarkedArea(latitude = 26.4986183, longitude =  80.2857243, radius = 100f) // Example coordinates
     private var currentLatitude by mutableStateOf<Double?>(null)
     private var currentLongitude by mutableStateOf<Double?>(null)
     private lateinit var screenLockReceiver: ScreenLockReceiver
@@ -75,54 +118,10 @@ class MainActivity : ComponentActivity() {
     private val PREFS_KEY_ALERT_SHOWN = "isAlertShown"
 
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handler = Handler(Looper.getMainLooper())
-        setContent {
-            BroadTheme {
-                MainActivityContent()
-                Scaffold(
-                    modifier = Modifier.fillMaxSize().background(color = Color.Black)
-                ) { innerPadding ->
-                    Box(
-                        modifier = Modifier.padding(innerPadding)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Button(onClick = { startAdvertising() }) {
-                                Text(text = "Start Broadcasting")
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { stopAdvertising() }) {
-                                Text(text = "Stop Broadcasting")
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { startScanning() }) {
-                                Text(text = "Start Scanning")
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { stopScanning() }) {
-                                Text(text = "Stop Scanning")
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { showDiscoveredDevicesWindow() }) {
-                                Text(text = "Show Discovered Devices")
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { setContent { BroadTheme { ShowHistoryDevicesWindow(
-                                currentLatitude,
-                                currentLongitude
-                            ) } } }) {
-                                Text(text = "Show Discovered Devices")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
 
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -163,6 +162,15 @@ class MainActivity : ComponentActivity() {
 
         startScanning()
 
+
+        setContent {
+            BroadTheme {
+                HomePage()
+            }
+        }
+
+
+
     }
 
     private val locationListener = object : LocationListener {
@@ -173,6 +181,12 @@ class MainActivity : ComponentActivity() {
             if (isUserInMarkedArea(userLatitude, userLongitude, markedArea)) {
                 val intent = Intent(this@MainActivity, AreaAlertReceiver::class.java)
                 sendBroadcast(intent)
+
+                setContent{
+                    BroadTheme {
+                        HomePage(true)
+                    }
+                }
             } else {
                 resetAlertShown()
             }
@@ -436,6 +450,8 @@ class MainActivity : ComponentActivity() {
         // Trigger system alert and notification only once
         if (!alertShown) {
             showSystemAlert(rssi)
+
+            //marked location show notification
             showNotification()
             alertShown = true
         }
@@ -474,8 +490,35 @@ class MainActivity : ComponentActivity() {
                     .setMessage("SOMEONE NEED HELP")
                     .setPositiveButton("Reach") { dialog, _ ->
                         dialog.dismiss()
-                        showDiscoveredDevicesWindow()
                         sharedPreferences.edit().putBoolean(PREFS_KEY_ALERT_SHOWN, true).apply()
+                        stopAlertSound()
+                        setContent {
+                            BroadTheme {
+                                val initdistance: Double = 0.0
+                                val (distance , setDistance) = useState(initdistance)
+                                playAlertSound()
+                                DiscoveredDevicesWindow(devices = discoveredDevices, setDistance)
+                                Surface(modifier = Modifier.fillMaxSize()){
+                                    Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()){
+                                        Box(modifier = Modifier.size(300.dp).drawBehind { drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0x33ff0000), Color(0x00ff0000)))) }, contentAlignment = Alignment.Center) {
+                                            Text(String.format("%.1f", distance)+"m", maxLines = 1, textAlign = TextAlign.Center, fontSize = 96.sp, fontWeight = FontWeight.Medium, color = Color.Red, modifier = Modifier)
+                                        }
+                                        Text("HELP!!!", fontSize = 48.sp, fontWeight = FontWeight.Medium, color = Color.Red, modifier = Modifier.padding(top = 30.dp, bottom = 10.dp))
+                                        Text("Hey, someone near you needs your help.", textAlign = TextAlign.Center, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color(0x55000000), modifier = Modifier.fillMaxWidth(.8f))
+                                        Button(onClick = {
+                                            stopAlertSound()
+                                            setContent{
+                                                BroadTheme {
+                                                    HomePage()
+                                                }
+                                            }
+                                        }, modifier = Modifier.padding(top = 20.dp)) {
+                                            Text("Dismiss")
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     .setCancelable(false)
                     .create()
@@ -525,6 +568,33 @@ class MainActivity : ComponentActivity() {
                 .build()
 
             notificationManager.notify(1, notification)
+            setContent {
+                BroadTheme {
+                    val initdistance: Double = 0.0
+                    val (distance , setDistance) = useState(initdistance)
+                    playAlertSound()
+                    DiscoveredDevicesWindow(devices = discoveredDevices, setDistance)
+                    Surface(modifier = Modifier.fillMaxSize()){
+                        Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()){
+                            Box(modifier = Modifier.size(300.dp).drawBehind { drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0x33ff0000), Color(0x00ff0000)))) }, contentAlignment = Alignment.Center) {
+                                Text(String.format("%.1f", distance)+"m", maxLines = 1, textAlign = TextAlign.Center, fontSize = 96.sp, fontWeight = FontWeight.Medium, color = Color.Red, modifier = Modifier)
+                            }
+                            Text("HELP!!!", fontSize = 48.sp, fontWeight = FontWeight.Medium, color = Color.Red, modifier = Modifier.padding(top = 30.dp, bottom = 10.dp))
+                            Text("Hey, someone near you needs your help.", textAlign = TextAlign.Center, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color(0x55000000), modifier = Modifier.fillMaxWidth(.8f))
+                            Button(onClick = {
+                                stopAlertSound()
+                                setContent{
+                                    BroadTheme {
+                                        HomePage()
+                                    }
+                                }
+                                             }, modifier = Modifier.padding(top = 20.dp)) {
+                                Text("Dismiss")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -609,7 +679,7 @@ class MainActivity : ComponentActivity() {
     private fun showDiscoveredDevicesWindow() {
         setContent {
             BroadTheme {
-                DiscoveredDevicesWindow(devices = discoveredDevices)
+
             }
         }
     }
@@ -756,7 +826,7 @@ fun MainActivityContent() {
 }
 
     @Composable
-    fun DiscoveredDevicesWindow(devices: List<Device>) {
+    fun DiscoveredDevicesWindow(devices: List<Device>, setDistance: (Double) -> Unit) {
         val deviceStates = remember { devices.map { it.id to mutableStateOf(it) }.toMap() }
         val allDevices = remember { mutableStateListOf<Device>() }
 
@@ -771,26 +841,10 @@ fun MainActivityContent() {
                     }
                 }
                 delay(1000) // Update every second
+                DeviceList(devices = allDevices, setDistance)
             }
         }
 
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            Box(
-                modifier = Modifier.padding(innerPadding)
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Text(text = "Discovered Devices", modifier = Modifier.padding(16.dp))
-                    DeviceList(devices = allDevices)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { setContent { BroadTheme { MainActivityContent() } } }) {
-                        Text(text = "Back")
-                    }
-                }
-            }
-        }
     }
 
     @Composable
@@ -826,32 +880,375 @@ fun ShowHistoryDevicesWindow(currentLatitude: Double?, currentLongitude: Double?
 }
 
 
-    @Composable
-    fun DeviceList(devices: List<Device>) {
+    fun DeviceList(devices: List<Device>, setDistance: (Double) -> Unit) {
         val currentTime = System.currentTimeMillis()
+        var distance: Double = 0.0
 
-        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            devices.forEach { device ->
-                val distance = device.calculateDistance()
-                val isActive = currentTime - device.lastSeen <= 2000 // 2 seconds timeout
-                val textColor = if (isActive) Color.Black else Color.Gray
-                val backgroundColor = if (isActive) Color.Yellow else Color.Transparent
+        devices.forEach() { device->
+            distance = device.calculateDistance()
+            val isActive = currentTime - device.lastSeen <= 2000 // 2 seconds timeout
+            val textColor = if (isActive) Color.Black else Color.Gray
+            val backgroundColor = if (isActive) Color.Yellow else Color.Transparent
+        }
 
-                Box(
-                    modifier = Modifier
-                        .background(color = backgroundColor)
-                        .padding(8.dp)
-                ) {
+        setDistance(distance)
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun HomePage(openalert: Boolean = false){
+        val (openAlert, setOpenAlert) = useState(openalert)
+        val (isExpanded, setIsExpanded) = useState(false)
+        val (isSOS, setIsSOS) = useState(false)
+        val (helpAlert, setHelpAlert) = useState(false)
+
+
+
+        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+        val scope = rememberCoroutineScope()
+        var user_name = "Harshita Kumari"
+        var user_phoneNumber = "+91-9149358878"
+
+
+
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(modifier = Modifier.fillMaxWidth(.8f)) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 50.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(user_name, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                                Text(user_phoneNumber, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0x88000000))
+                            }
+                            Spacer(modifier = Modifier.fillMaxWidth(.45f))
+                            Image(painter = painterResource(R.drawable.profile), contentDescription = "Profile Image", modifier = Modifier.size(50.dp).fillMaxWidth())
+                        }
+                        HorizontalDivider(modifier = Modifier.align(Alignment.CenterHorizontally).fillMaxWidth(.2f).padding(vertical = 20.dp), thickness = 3.dp)
+                        NavigationDrawerItem(label = {
+                            Text("Home", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 10.dp))
+                        },
+                            onClick = {},
+                            selected = true)
+                        NavigationDrawerItem(label = {
+                            Text("About", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 10.dp))
+                        },
+                            onClick = {},
+                            selected = false)
+                        NavigationDrawerItem(label = {
+                            Text("Profile", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 10.dp))
+                        },
+                            onClick = {},
+                            selected = false)
+                        NavigationDrawerItem(label = {
+                            Text("Aadhar Verification", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 10.dp))
+                        },
+                            onClick = { setContent{
+                                BroadTheme {
+                                    LoginPage()
+                                }
+                            }},
+                            selected = false)
+                        NavigationDrawerItem(label = {
+                            Text("Hotspots Near You", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 10.dp))
+                        },
+                            onClick = {},
+                            selected = false)
+                        NavigationDrawerItem(label = {
+                            Column {
+                                Text(
+                                    "Featured",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Red,
+                                    modifier = Modifier.padding(start = 10.dp)
+                                )
+                            }
+                        },
+                            onClick = { setIsExpanded(!isExpanded) },
+                            selected = false)
+                        AnimatedVisibility(visible = isExpanded) {
+                            Column(modifier = Modifier.padding(start = 40.dp)) {
+                                TextButton(onClick = {}) {
+                                    Text("Self Defence", fontWeight = FontWeight.Medium, modifier = Modifier)
+                                }
+                                TextButton(onClick = {}) {
+                                    Text(
+                                        "Youtube Training Sessions",
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                TextButton(onClick = {}) {
+                                    Text("Things to Buy", fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ) {
+            Scaffold(
+                modifier = Modifier,
+                topBar = {
+                    TopAppBar(title = {
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.absoluteOffset(x = (-20).dp)
+                            ) {
+                                Button(
+                                    onClick = { scope.launch { drawerState.open() } },
+                                    shape = CircleShape,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+                                ) {
+                                    Icon(
+                                        imageVector = ImageVector.vectorResource(R.drawable.menu),
+                                        contentDescription = "Menu button icon",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    Text(
+                                        "I am ",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.Red
+                                    )
+                                    Text(
+                                        text = "Abhayada",
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            HorizontalDivider(thickness = (1.5).dp, modifier = Modifier.fillMaxWidth().offset(x = (-10).dp).padding(top = 2.dp))
+                        }
+                    })
+                }
+            ) { innerPadding ->
+                Column(modifier = Modifier.padding(innerPadding).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    when{
+                        !helpAlert ->
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Spacer(modifier = Modifier.height(30.dp))
+                                Button(
+                                    onClick = {
+                                        setIsSOS(true)
+                                    },
+                                    shape = CircleShape,
+                                    modifier = Modifier.height(200.dp).width(200.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xffFFE0E0)
+                                    )
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            text = "SEND",
+                                            fontSize = 15.sp,
+                                            color = Color.Red,
+                                            modifier = Modifier.offset(y = 5.dp)
+                                        )
+                                        Text(
+                                            text = "SOS",
+                                            fontSize = 64.sp,
+                                            color = Color.Red,
+                                            fontWeight = FontWeight.Normal
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(30.dp))
+                                OutlinedButton(
+                                    onClick = { setOpenAlert(true) },
+                                    contentPadding = PaddingValues(
+                                        horizontal = 20.dp,
+                                        vertical = 15.dp
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(.9f)
+                                ) {
+                                    Text(
+                                        text = "Your current location.",
+                                        fontSize = 20.sp,
+                                        modifier = Modifier
+                                    )
+                                    Spacer(modifier = Modifier.fillMaxWidth(.7f))
+                                    Icon(
+                                        imageVector = ImageVector.vectorResource(R.drawable.location),
+                                        contentDescription = "Location Icon"
+                                    )
+                                }
+                                HorizontalDivider(
+                                    modifier = Modifier.fillMaxWidth(.2f).padding(vertical = 20.dp),
+                                    thickness = 3.dp
+                                )
+                                EmergencyContactsSection()
+                                PopUp(openAlert, setOpenAlert)
+                                when {
+                                    isSOS ->
+                                        AlertDialog(
+                                            modifier = Modifier.fillMaxWidth().fillMaxHeight(.9f),
+                                            containerColor = Color.White,
+                                            title = {
+                                                Column(modifier = Modifier.padding(vertical = 30.dp)){
+                                                    Text("SOS trigger detected", fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = Color(0x99000000))
+                                                    Text("Calling 181 and sharing location with emergency contacts in...", lineHeight = 25.sp, modifier = Modifier.padding(top = 10.dp), fontSize = 18.sp, fontWeight = FontWeight.Medium, color = Color(0x55000000))
+                                                }
+                                            },
+                                            text = {
+                                                Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
+                                                    val (timer, setTimer) = useState(30f)
+                                                    val (timeOut, setTimeOut) = useState(false)
+
+                                                    val animateTimer: Float by animateFloatAsState(timer, label = "Timer Animation")
+
+                                                    LaunchedEffect(timer) {
+                                                        delay(1000)
+                                                        if(timer > 0f && !timeOut) {
+                                                            setTimer(timer - 1)
+                                                        }
+                                                        if(timer == 0f) {
+                                                            setTimeOut(true)
+                                                        }
+                                                    }
+
+                                                    Spacer(modifier = Modifier.fillMaxHeight(.1f))
+                                                    Box(modifier = Modifier.drawBehind {
+                                                            drawCircle(color = Color(0x22000000))
+                                                        }
+                                                        .height(200.dp)
+                                                        .width(200.dp)
+                                                    ){
+                                                        Box(modifier = Modifier.drawBehind {
+                                                                drawArc(color = Color(0x88000000), startAngle = -90f, sweepAngle = (animateTimer/30)*360f, true)
+                                                            }
+                                                            .height(200.dp)
+                                                            .width(200.dp),
+                                                            contentAlignment = Alignment.Center
+                                                        ){
+                                                            Box(modifier = Modifier.drawBehind {
+                                                                    drawCircle(color = Color.White)
+                                                                }
+                                                                .height(190.dp)
+                                                                .width(190.dp),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                if(timeOut){
+                                                                    startAdvertising()
+                                                                    Column(modifier = Modifier.fillMaxWidth()){
+                                                                        Text("SOS send!!!", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 24.sp, color = Color(0xaa000000))
+                                                                        Text("Help is on the way.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 16.sp, color = Color(0x55000000))
+                                                                    }
+                                                                }
+                                                                else{
+                                                                    Text(timer.toInt().toString(), fontSize = 70.sp, color = Color(0xaa000000))
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally){
+                                                        Button(onClick = {
+                                                            stopAdvertising()
+                                                            startScanning()
+                                                            setIsSOS(false)
+                                                        },
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xff2ED436), contentColor = Color(0xff075400))) {
+                                                            Text(" I'm OK ", fontSize = 20.sp,  modifier = Modifier.padding(8.dp))
+                                                        }
+                                                        Spacer(modifier = Modifier.height(10.dp))
+                                                        Button(onClick = {
+                                                            setTimeOut(true)
+                                                        },
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xddFF3737), contentColor = Color(0xff640000))) {
+                                                            Text("Send SOS", fontSize = 20.sp,  modifier = Modifier.padding(8.dp))
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            onDismissRequest = {
+                                                stopAdvertising()
+                                                startScanning()
+                                                setIsSOS(false)
+                                            },
+                                            confirmButton = {}
+                                        )
+                                }
+
+                            }
+                        helpAlert -> {}
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun LoginPage(){
+        var aadharNumber by remember { mutableStateOf("") }
+
+        Surface(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 40.dp)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.padding(top = 40.dp)) {
                     Text(
-                        text = "ID: ${device.id}, MAC: ${device.macAddress}, Distance: ${
-                            "%.2f".format(
-                                distance
-                            )
-                        } meters",
-                        color = textColor
+                        text = "Aadhar",
+                        fontSize = 40.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Verification",
+                        fontSize = 40.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp).border(width = 1.dp, color = Color(0x22000000), shape = RoundedCornerShape(size = 15.dp)).height(59.dp),
+                    value = aadharNumber,
+                    onValueChange = {aadharNumber = it},
+                    placeholder = { Text(text = "XXXX - XXXX - XXXX - XXXX", fontSize = 20.sp, fontWeight = FontWeight.Medium, modifier = Modifier.alpha(0.25f)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    ),
+                    textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color(0xaa000000)),
+                    shape = RoundedCornerShape(size = 15.dp)
+                )
+                Row(modifier = Modifier.padding(top = 10.dp, start = 5.dp)) {
+                    RadioButton(selected = false, onClick = null, modifier = Modifier)
+                    Spacer(modifier = Modifier.size(5.dp))
+                    Text(text = "Yes, I agree to ", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xaa000000))
+                    Text(text = "Terms of Service.", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.Blue)
+                }
+                Box(modifier = Modifier.fillMaxSize().padding(bottom = 30.dp), contentAlignment = Alignment.BottomCenter) {
+                    Button(onClick = {
+                        setContent {
+                            BroadTheme {
+                                HomePage()
+                            }
+                        }
+                    }, modifier = Modifier.height(55.dp), shape = RoundedCornerShape(size = 15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xffd9d9d9))) {
+                        Text(
+                            text = "Send OTP",
+                            textAlign = TextAlign.Center,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xaa000000),
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        )
+                    }
+                }
             }
         }
     }

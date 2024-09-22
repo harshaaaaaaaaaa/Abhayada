@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import androidx.compose.runtime.Composable
 import androidx.core.app.NotificationCompat
 
 class AreaAlertService : Service() {
@@ -17,7 +18,6 @@ class AreaAlertService : Service() {
     }
 
     private fun showNotification() {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notificationChannelId = "CUSTOM_AREA_ALERT_CHANNEL"
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -26,7 +26,6 @@ class AreaAlertService : Service() {
                 "Custom Area Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             )
-            notificationManager.createNotificationChannel(notificationChannel)
         }
 
         val notification: Notification = NotificationCompat.Builder(this, notificationChannelId)
