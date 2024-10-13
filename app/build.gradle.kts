@@ -12,13 +12,13 @@ android {
         }
     }
     namespace = "com.help.Abhayada"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.help.Abhayada"
         minSdk = 33
         //noinspection OldTargetApi
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 

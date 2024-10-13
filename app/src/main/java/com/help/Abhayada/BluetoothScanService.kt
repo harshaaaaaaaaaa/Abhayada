@@ -32,7 +32,7 @@ class BluetoothScanService : Service() {
         val channelId = "BluetoothScanServiceChannel"
         val channel = NotificationChannel(
             channelId,
-            "Bluetooth Scan Service Channel",
+            "Bluetooth SCC service",
             NotificationManager.IMPORTANCE_DEFAULT
         )
         val manager = getSystemService(NotificationManager::class.java)

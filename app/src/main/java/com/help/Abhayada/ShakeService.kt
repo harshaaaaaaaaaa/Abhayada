@@ -15,6 +15,7 @@ import android.bluetooth.le.AdvertiseSettings
 import android.os.Handler
 import android.os.Looper
 import android.os.Vibrator
+import androidx.compose.runtime.Composable
 
 class ShakeService : Service() {
 
@@ -23,7 +24,6 @@ class ShakeService : Service() {
         super.onCreate()
         shakeDetector = ShakeDetector(this@ShakeService) {
             val intent = Intent("com.example.broad.SHAKE_DETECTED")
-            startBroadcastingWithHapticFeedback()
         }
         shakeDetector.start()
 
@@ -31,17 +31,6 @@ class ShakeService : Service() {
         registerReceiver(shakeReceiver, filter, RECEIVER_NOT_EXPORTED)
 
         startForegroundService()
-    }
-
-    private fun startBroadcastingWithHapticFeedback() {
-        startAdvertising()
-        triggerHapticFeedback()
-    }
-    private fun triggerHapticFeedback() {
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (vibrator.hasVibrator()) {
-            vibrator.vibrate(500) // Vibrate for 500 milliseconds
-        }
     }
 
     private fun startForegroundService() {
@@ -68,24 +57,7 @@ class ShakeService : Service() {
 
     private val shakeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.broad.SHAKE_DETECTED") {
-                val builder = AlertDialog.Builder(this@ShakeService)
-                builder.setTitle("Start Broadcasting")
-                builder.setMessage("Do you want to start broadcasting?")
-                builder.setPositiveButton("Yes") { _, _ ->
-                    startAdvertising()
-                }
-                builder.setNegativeButton("No") { _, _ -> }
-                val dialog = builder.create()
-                dialog.show()
-
-                // Automatically dismiss the dialog after 10 seconds
-                Handler(Looper.getMainLooper()).postDelayed({
-                    if (dialog.isShowing) {
-                        dialog.dismiss()
-                    }
-                }, 10000)
-            }
+            MainActivity().launchSOSTimer()
         }
     }
 
@@ -98,6 +70,7 @@ class ShakeService : Service() {
 
         BluetoothAdvertiser.startEddystoneAdvertising(this, settings)
         BluetoothAdvertiser.startIBeaconAdvertising(this, settings)
+        MainActivity().launchSOSTimer()
     }
 
     override fun onDestroy() {

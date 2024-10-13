@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="app">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2024-08-31T18:18:33.877579967Z">
+        <DropdownSelection timestamp="2024-10-13T12:49:55.030613458Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="LocalEmulator" identifier="path=/home/harsha/.var/app/com.google.AndroidStudio/config/.android/avd/Virtual_Pixel.avd" />
+              <DeviceId pluginId="Default" identifier="serial=&lt;unknown&gt;;connection=617b4d70" />
             </handle>
           </Target>
         </DropdownSelection>

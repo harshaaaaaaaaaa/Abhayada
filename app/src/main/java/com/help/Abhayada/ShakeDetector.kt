@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import androidx.compose.runtime.Composable
 
 class ShakeDetector(private val context: Context, private val onShake: () -> Unit) : SensorEventListener {
 
@@ -24,6 +25,7 @@ class ShakeDetector(private val context: Context, private val onShake: () -> Uni
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
 
+
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
             val x = event.values[0]
@@ -38,6 +40,9 @@ class ShakeDetector(private val context: Context, private val onShake: () -> Uni
 
             if (gForce > SHAKE_THRESHOLD_GRAVITY) {
                 val now = System.currentTimeMillis()
+
+                print("SHAKE ON SENSOR CHANGE")
+
                 if (shakeTimestamp + SHAKE_SLOP_TIME_MS > now) {
                     return
                 }

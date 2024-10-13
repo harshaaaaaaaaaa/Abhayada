@@ -149,7 +149,7 @@ class MainActivity : ComponentActivity() {
 
         shakeDetector = ShakeDetector(this) {
             if (!isAdvertising) {
-                startAdvertising()
+            launchSOSTimer()
             }
         }
         shakeDetector.start()
@@ -684,6 +684,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun launchSOSTimer(){
+        setContent {
+            HomePage(issos = true)
+        }
+    }
+
     private fun requestAllPermissionsOnInstall() {
     val permissions = arrayOf(
         Manifest.permission.BLUETOOTH,
@@ -896,10 +902,10 @@ fun ShowHistoryDevicesWindow(currentLatitude: Double?, currentLongitude: Double?
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun HomePage(openalert: Boolean = false){
+    fun HomePage(openalert: Boolean = false, issos: Boolean = false){
         val (openAlert, setOpenAlert) = useState(openalert)
         val (isExpanded, setIsExpanded) = useState(false)
-        val (isSOS, setIsSOS) = useState(false)
+        val (isSOS, setIsSOS) = useState(issos)
         val (helpAlert, setHelpAlert) = useState(false)
 
 
